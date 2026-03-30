@@ -34,6 +34,7 @@ public:
 private:
     bool configureIdleState();
     bool sampleMatrix(bool sample[kMaxRows][kMaxCols]);
+    bool readStableInputMasks(uint32_t &stableHighMask, uint32_t &stableLowMask);
     void processSample(const bool sample[kMaxRows][kMaxCols]);
     void clearState();
     bool enqueueEvent(const Tca6424KeyEvent &event);

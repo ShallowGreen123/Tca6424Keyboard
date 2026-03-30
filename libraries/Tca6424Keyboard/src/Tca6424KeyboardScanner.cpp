@@ -3,6 +3,9 @@
 namespace
 {
 constexpr uint32_t kAllPortsMask = 0x00FFFFFFUL;
+constexpr uint8_t kInputConfirmSamples = 3;
+constexpr uint16_t kLineSettleDelayUs = 150;
+constexpr uint16_t kInputSampleGapUs = 80;
 } // namespace
 
 Tca6424KeyboardScanner::Tca6424KeyboardScanner(Tca6424 &device, uint8_t debounceSamples)
@@ -124,41 +127,94 @@ bool Tca6424KeyboardScanner::configureIdleState()
         configMask &= ~bitForPort(rows_[i]);
     }
 
-    return device_.writeOutputs(kAllPortsMask) && device_.writeConfig(configMask);
+    if (device_.configShadow() != configMask && !device_.writeConfig(configMask))
+    {
+        return false;
+    }
+
+    return device_.writeOutputs(kAllPortsMask);
 }
 
 bool Tca6424KeyboardScanner::sampleMatrix(bool sample[kMaxRows][kMaxCols])
 {
+    uint32_t columnMask = 0;
+    for (uint8_t colIndex = 0; colIndex < colCount_; ++colIndex)
+    {
+        columnMask |= bitForPort(cols_[colIndex]);
+    }
+
+    if (!configureIdleState())
+    {
+        return false;
+    }
+
+    delayMicroseconds(kLineSettleDelayUs);
+
+    uint32_t idleHighMask = 0;
+    uint32_t idleLowMask = 0;
+    if (!readStableInputMasks(idleHighMask, idleLowMask))
+    {
+        return false;
+    }
+    idleHighMask &= columnMask;
+
     for (uint8_t rowIndex = 0; rowIndex < rowCount_; ++rowIndex)
     {
         uint32_t outputMask = kAllPortsMask;
-        uint32_t configMask = kAllPortsMask;
-
-        for (uint8_t i = 0; i < rowCount_; ++i)
-        {
-            configMask &= ~bitForPort(rows_[i]);
-        }
-
         outputMask &= ~bitForPort(rows_[rowIndex]);
 
-        if (!device_.writeOutputs(outputMask) || !device_.writeConfig(configMask))
+        if (!device_.writeOutputs(outputMask))
         {
             return false;
         }
 
+        delayMicroseconds(kLineSettleDelayUs);
+
+        uint32_t activeHighMask = 0;
+        uint32_t activeLowMask = 0;
+        if (!readStableInputMasks(activeHighMask, activeLowMask))
+        {
+            return false;
+        }
+        activeLowMask &= columnMask;
+
+        for (uint8_t colIndex = 0; colIndex < colCount_; ++colIndex)
+        {
+            const uint32_t bit = bitForPort(cols_[colIndex]);
+
+            // A valid press must read high in the idle state and stable low
+            // only when the active row is driven low.
+            sample[rowIndex][colIndex] = ((idleHighMask & bit) != 0) &&
+                                         ((activeLowMask & bit) != 0);
+        }
+    }
+
+    return configureIdleState();
+}
+
+bool Tca6424KeyboardScanner::readStableInputMasks(uint32_t &stableHighMask, uint32_t &stableLowMask)
+{
+    stableHighMask = kAllPortsMask;
+    stableLowMask = kAllPortsMask;
+
+    for (uint8_t sampleIndex = 0; sampleIndex < kInputConfirmSamples; ++sampleIndex)
+    {
         uint32_t inputs = 0;
         if (!device_.readInputs(inputs))
         {
             return false;
         }
 
-        for (uint8_t colIndex = 0; colIndex < colCount_; ++colIndex)
+        stableHighMask &= inputs;
+        stableLowMask &= (~inputs & kAllPortsMask);
+
+        if (sampleIndex + 1 < kInputConfirmSamples)
         {
-            sample[rowIndex][colIndex] = (inputs & bitForPort(cols_[colIndex])) == 0;
+            delayMicroseconds(kInputSampleGapUs);
         }
     }
 
-    return configureIdleState();
+    return true;
 }
 
 void Tca6424KeyboardScanner::processSample(const bool sample[kMaxRows][kMaxCols])

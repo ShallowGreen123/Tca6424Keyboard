@@ -10,7 +10,7 @@ constexpr uint8_t kI2cAddress = 0x22;
 constexpr uint8_t kSdaPin = 16;
 constexpr uint8_t kSclPin = 15;
 constexpr uint32_t kI2cFreq = 400000;
-constexpr uint8_t kDebounceSamples = 3;
+constexpr uint8_t kDebounceSamples = 4;
 constexpr uint16_t kScanPeriodMs = 10;
 constexpr uint32_t kSerialWaitMs = 3000;
 constexpr uint32_t kProbeRetryMs = 1000;
@@ -141,6 +141,11 @@ void printMatrixInfo()
 void printEvent(const Tca6424KeyEvent &event)
 {
     const uint16_t keyValue = kKeyValueMap[event.rowIndex][event.colIndex];
+
+    if (keyValue == 0)
+    {
+        return;
+    }
 
     Serial.printf("%-7s key=%u R%uC%u [row=%s/%s col=%s/%s]\r\n",
                   event.pressed ? "PRESS" : "RELEASE",
