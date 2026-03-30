@@ -73,11 +73,25 @@ constexpr const char *kColNames[] = {
     "COL26",
 };
 
+constexpr uint16_t kKeyValueMap[][14] = {
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 126},              // ROW25
+    {0, 62, 0, 30, 46, 49, 50, 53, 61, 52, 44, 89, 0, 0},      // ROW1
+    {0, 0, 0, 48, 34, 35, 36, 38, 39, 40, 0, 84, 58, 0},       // ROW2
+    {0, 0, 0, 47, 19, 21, 23, 37, 26, 51, 0, 31, 0, 0},        // ROW4
+    {0, 0, 0, 33, 18, 20, 22, 24, 25, 54, 0, 83, 0, 0},        // ROW5
+    {0, 0, 0, 17, 3, 5, 7, 9, 11, 55, 0, 43, 0, 0},            // ROW6
+    {0, 0, 0, 16, 4, 6, 8, 10, 0, 79, 0, 29, 0, 0},            // ROW9
+    {0, 0, 59, 2, 112, 114, 116, 118, 120, 122, 0, 15, 0, 0},  // ROW10
+    {127, 60, 0, 1, 110, 113, 115, 117, 119, 121, 57, 32, 0, 0} // ROW12
+};
+
 constexpr size_t kRowCount = sizeof(kRowPins) / sizeof(kRowPins[0]);
 constexpr size_t kColCount = sizeof(kColPins) / sizeof(kColPins[0]);
 
 static_assert(kRowCount == (sizeof(kRowNames) / sizeof(kRowNames[0])), "Row metadata must match");
 static_assert(kColCount == (sizeof(kColNames) / sizeof(kColNames[0])), "Column metadata must match");
+static_assert(kRowCount == (sizeof(kKeyValueMap) / sizeof(kKeyValueMap[0])), "Key map row count must match");
+static_assert(kColCount == (sizeof(kKeyValueMap[0]) / sizeof(kKeyValueMap[0][0])), "Key map col count must match");
 
 Tca6424 gExpander;
 Tca6424KeyboardScanner gScanner(gExpander, kDebounceSamples);
@@ -126,8 +140,11 @@ void printMatrixInfo()
 
 void printEvent(const Tca6424KeyEvent &event)
 {
-    Serial.printf("%-7s R%uC%u [row=%s/%s col=%s/%s]\r\n",
+    const uint16_t keyValue = kKeyValueMap[event.rowIndex][event.colIndex];
+
+    Serial.printf("%-7s key=%u R%uC%u [row=%s/%s col=%s/%s]\r\n",
                   event.pressed ? "PRESS" : "RELEASE",
+                  static_cast<unsigned>(keyValue),
                   static_cast<unsigned>(event.rowIndex + 1),
                   static_cast<unsigned>(event.colIndex + 1),
                   Tca6424::portLabel(event.rowPort),
